@@ -1,0 +1,5 @@
+snap_masked-scaffold103554_len21087_cov72-processed-gene-0.19-mRNA-1
+augustus_masked-scaffold12414_len1097_cov37_single-processed-gene-0.0-mRNA-1
+augustus_masked-scaffold16670_len17668_cov76-processed-gene-0.1-mRNA-1
+maker-scaffold3918_len81077_cov82-augustus-gene-0.99-mRNA-1
+snap_masked-scaffold7427_len68546_cov81-processed-gene-0.15-mRNA-1

@@ -18,7 +18,7 @@ The original files
 were too big to upload them to Github so I split them up into smaller pieces - see details in the `data/README.md` file.
 
 First, I need to restor those:
-``bash
+```bash
 
 for file in $(ls -1 data/x000000* | perl -ne 'chomp; @a=split(/\./); shift(@a); $suffix=join(".", @a); print "$suffix\n";' | sort -n | uniq)
 do 

@@ -4,10 +4,11 @@ For a recent paper we wanted to submit a functionally annotated draft genome to 
 
 
 
-First, I downloaded the program to do the conversion - I got version 1.0.0 - I saw that by now they have upgraded to version 1.29.17 or whatever so no warranty that everything will work with newer versions in the same way. I put the v.1.0.0 in a directory called `backup/`.
+First, I downloaded the program to do the conversion - I got version 1.0.0 - I saw that by now they have upgraded to version 1.21.77 or whatever so no warranty that everything will work with newer versions in the same way. I put the v.1.0.0 in a directory called `backup/`.
 ```bash
 wget ftp://ftp.ncbi.nih.gov/toolbox/ncbi_tools/converters/by_program/table2asn_GFF/linux64.table2asn_GFF.gz
 gunzip linux64.table2asn_GFF.gz 
+chmod a+x linux64.table2asn_GFF
 ./linux64.table2asn_GFF -version
 
 ```
@@ -86,16 +87,29 @@ cp data/maker2.nofasta.gff data/maker2.nofasta.curated.gff
 #scaffold103554_len21087_cov72   maker   CDS     2286    3365    ....
 ```
 
+In one of the reports from the conversion tool (`B_plicatilis.pass1.val`) there are gene models flagged up that are very short (Warning: 'SEQ_INST.ShortSeq'). I will remove those from the gff file.
+```bash
+grep -vf <(cat B_plicatilis.pass1.val | grep "SEQ_INST.ShortSeq" | cut -d " " -f 9 | cut -d "|" -f 3 | sed 's/-mRNA-.*//') data/maker2.nofasta.curated.gff > data/maker2.nofasta.curated.exshort.gff
+``` 
+
+Submit to the system.
+A few contigs were flagged up by the system as being contamination. Remove those (listed in the file `contigs_to_remove.txt`) from the fasta and gff file.
+```bash
+grep -vf contigs_to_remove.txt <(cat data/Brachionus_plicatilis_scaffold_min500_real.fasta | perl -ne 'chomp; $h=$_; $s=<>; print "$h\t$s"') | perl -ne 'chomp; @a=split("\t"); print "$a[0]\n$a[1]\n"' > contigs_cleaned.fasta
+grep -vf contigs_to_remove.txt data/maker2.nofasta.curated.exshort.gff > data/maker2.nofasta.curated.exshort.clean.gff
+```
+
+
 Now, I reran the conversion with the curated gene model.
 ```bash
 #rerun conversion to sqn
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i ./data/Brachionus_plicatilis_scaffold_min500_real.fasta -f ./data/maker2.nofasta.curated.gff -o ./B_plicatilis.pass2.sqn -Z ./B_plicatilis.pass2.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass2.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f ./data/maker2.nofasta.curated.exshort.clean.gff -o ./B_plicatilis.pass2.sqn -Z ./B_plicatilis.pass2.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass2.txt
 ```
 
 Now, the dr flagged up only 2413 genes with the SHORT INTRON issue. To deal with those as described above I have written a script, that will add the pseudo=true flag and a note.
 ```bash
 ## The remaining genes with the 'SHORT INTRON' issue will be flagged with a pseudo=true flag and a note that the respective genes are problematic
-./scripts/add_pseudo_to_shortintrons.py B_plicatilis.pass2.dr data/maker2.nofasta.curated.gff > fixed_shorts.gff
+./scripts/add_pseudo_to_shortintrons.py B_plicatilis.pass2.dr data/maker2.nofasta.curated.exshort.clean.gff > fixed_shorts.gff
 ```
 
 Now, I transfer the functional annotations, GO terms, evidence codes, and enzyme codes to the gff file from the annotation table that we have produced via Blast2GO. Wrote a script to do that.
@@ -104,15 +118,37 @@ Now, I transfer the functional annotations, GO terms, evidence codes, and enzyme
 ./scripts/transfer_annotations_from_blast2go_go_table_to_maker2gff.py <(zcat data/blast2go_go_table_20180407_1046.txt.gz) fixed_shorts.gff > annotated.gff
 ```
 
-Rename
+Update gene IDs
 ```bash
 cat annotated.gff | perl -ne 'chomp; if ($_ =~ /\tgene\t/){$count++; @a=split("\t"); @b=split(";", $a[-1]); $b[0] =~ s/ID=//; $old=$b[0]; $new="BpHYR1_".sprintf("%06d",$count); $_ =~ s/$old/$new/g; $_.=";Note=original geneID (Maker2) $old"; print "$_\n"}else{if ($old){$_ =~ s/$old/$new/g;} print "$_\n"}' > annotated.renamed.gff
 ```
 
-As a last step we run NCBI's conversion program again.
+Rerun NCBI's conversion program.
 ```bash
 #rerun conversion to sqn
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i ./data/Brachionus_plicatilis_scaffold_min500_real.fasta -f annotated.renamed.gff -o ./B_plicatilis.final.sqn -Z ./B_plicatilis.final.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.final.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.gff -o ./B_plicatilis.pass3.sqn -Z ./B_plicatilis.pass3.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass3.txt
+```
+
+Extract suspect protein names
+```bash
+cat B_plicatilis.pass3.dr | perl -ne 'chomp; if (!$print){$f=$_; $s=<>; if (($f =~ /^$/) and ($s =~ /SUSPECT_PRODUCT_NAMES/)){$print=1}}else{print "$_\n"}' | grep -v "^$" | perl -ne 'chomp; if ($_ =~ /SUSPECT_PRODUCT/){$desc=$_}else{@a=split("\t"); print "$a[-1]\t$a[1]\t\t$desc\n"}' | sort -n > SUSPECT_PROTEIN_NAMES.tsv
+```
+
+Manually curate the problematic product names:
+```
+cp SUSPECT_PROTEIN_NAMES.tsv SUSPECT_PROTEIN_NAMES.correction.tsv
+
+#The new file SUSPECT_PROTEIN_NAMES.correction.tsv contains the curated product names in the 3rd column and the gene IDs (that match the gff file) in the first column
+```
+
+Rename problematic products using a custom script
+```bash
+./scripts/rename_products.py SUSPECT_PROTEIN_NAMES.correction.tsv annotated.renamed.gff > annotated.renamed.curated.gff
+```
+
+Run NCBI's conversion program again:
+```bash
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.curated.gff -o ./B_plicatilis.final.sqn -Z ./B_plicatilis.final.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.final.txt
 ```
 
 I move the final files to a backup directory to keep them and remove the rest before committing to Github.

@@ -38,7 +38,7 @@ for line in fh:
 			
 			if gene_ID in names: #searching for the gene by name
 				found=1
-				print "FOUND"
+#				print "FOUND"
 				for i in reversed(range(len(features))):
 					if features[i].startswith("description="):
 #						print "Replacing %s with %s" %(features[i].replace("description=",""), names[gene_ID]['new'])

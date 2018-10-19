@@ -40,7 +40,7 @@ gunzip ./data/Brachionus_plicatilis_scaffold_min500_real.fasta.gz
 gunzip ./data/maker2.nofasta.gff.gz
 
 #Run conversion
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i ./data/Brachionus_plicatilis_scaffold_min500_real.fasta -f ./data/maker2.nofasta.gff -o ./B_plicatilis.pass1.sqn -Z ./B_plicatilis.pass1.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass1.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i ./data/Brachionus_plicatilis_scaffold_min500_real.fasta -f ./data/maker2.nofasta.gff -o ./B_plicatilis.pass1.sqn -Z ./B_plicatilis.pass1.dr -locus-tag-prefix BpHYR1 -n "Brachionus plicatilis" -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass1.txt
 
 ```
 
@@ -99,11 +99,10 @@ grep -vf contigs_to_remove.txt <(cat data/Brachionus_plicatilis_scaffold_min500_
 grep -vf contigs_to_remove.txt data/maker2.nofasta.curated.exshort.gff > data/maker2.nofasta.curated.exshort.clean.gff
 ```
 
-
 Now, I reran the conversion with the curated gene model.
 ```bash
 #rerun conversion to sqn
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f ./data/maker2.nofasta.curated.exshort.clean.gff -o ./B_plicatilis.pass2.sqn -Z ./B_plicatilis.pass2.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass2.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f ./data/maker2.nofasta.curated.exshort.clean.gff -o ./B_plicatilis.pass2.sqn -Z ./B_plicatilis.pass2.dr -locus-tag-prefix BpHYR1 -n "Brachionus plicatilis" -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass2.txt
 ```
 
 Now, the dr flagged up only 2413 genes with the SHORT INTRON issue. To deal with those as described above I have written a script, that will add the pseudo=true flag and a note.
@@ -112,7 +111,7 @@ Now, the dr flagged up only 2413 genes with the SHORT INTRON issue. To deal with
 ./scripts/add_pseudo_to_shortintrons.py B_plicatilis.pass2.dr data/maker2.nofasta.curated.exshort.clean.gff > fixed_shorts.gff
 ```
 
-Now, I transfer the functional annotations, GO terms, evidence codes, and enzyme codes to the gff file from the annotation table that we have produced via Blast2GO. Wrote a script to do that.
+Now, I transfer the functional annotations, GO terms, evidence codes, and enzyme codes to the gff file from the annotation table that we have produced via Blast2GO. Wrote a script to do that. Takes a while ..
 ```bash
 ## transfer functional annotatino from blast2GO table to the gff file
 ./scripts/transfer_annotations_from_blast2go_go_table_to_maker2gff.py <(zcat data/blast2go_go_table_20180407_1046.txt.gz) fixed_shorts.gff > annotated.gff
@@ -126,7 +125,7 @@ cat annotated.gff | perl -ne 'chomp; if ($_ =~ /\tgene\t/){$count++; @a=split("\
 Rerun NCBI's conversion program.
 ```bash
 #rerun conversion to sqn
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.gff -o ./B_plicatilis.pass3.sqn -Z ./B_plicatilis.pass3.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass3.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.gff -o ./B_plicatilis.pass3.sqn -Z ./B_plicatilis.pass3.dr -locus-tag-prefix BpHYR1 -n "Brachionus plicatilis" -taxid 10195 -V b &> output_table2asn_B_plicatilis.pass3.txt
 ```
 
 Extract suspect protein names
@@ -141,6 +140,14 @@ cp SUSPECT_PROTEIN_NAMES.tsv SUSPECT_PROTEIN_NAMES.correction.tsv
 #The new file SUSPECT_PROTEIN_NAMES.correction.tsv contains the curated product names in the 3rd column and the gene IDs (that match the gff file) in the first column
 ```
 
+Commas in gene descriptions/CDS product names cause problems/parsing errors, so I find all that contain comma and replace it with '-'. Then add those to the Protein name correction file.
+```bash
+cat annotated.renamed.curated.gff | perl -ne 'chomp; if ($_ =~ /\tgene\t/){@a=split("\t"); @b=split(";",$a[8]); for (@b){if (($_ =~ /description=/) and ($_ =~ /,/)){print "$a[8]\n"}}}' | perl -ne 'chomp; @a=split(";"); for (@a){if ($_ =~ /ID=/){$_ =~ s/ID=//; $id = $_;} if ($_ =~ /description=/){$_ =~ s/description=//; $orig=$_}} $new = $orig; $new =~ s/,/-/g; print "$id\t$orig\t$new\n"' > comma.tsv
+cat SUSPECT_PROTEIN_NAMES.correction.tsv | sort -n > temp
+mv temp SUSPECT_PROTEIN_NAMES.correction.tsv 
+```
+
+
 Rename problematic products using a custom script
 ```bash
 ./scripts/rename_products.py SUSPECT_PROTEIN_NAMES.correction.tsv annotated.renamed.gff > annotated.renamed.curated.gff
@@ -148,25 +155,31 @@ Rename problematic products using a custom script
 
 Run NCBI's conversion program again:
 ```bash
-./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.curated.gff -o ./B_plicatilis.final.sqn -Z ./B_plicatilis.final.dr -locus-tag-prefix BpHYR1 -n Brachionus_plicatilis -taxid 10195 -V b &> output_table2asn_B_plicatilis.final.txt
+./linux64.table2asn_GFF -M n -J -c w -euk -t ./data/template.sbt -gaps-min 10 -l paired-ends -i contigs_cleaned.fasta -f annotated.renamed.curated.gff -o ./B_plicatilis.final.sqn -Z ./B_plicatilis.final.dr -locus-tag-prefix BpHYR1 -n "Brachionus plicatilis" -taxid 10195 -V b &> output_table2asn_B_plicatilis.final.txt
 ```
 
 I move the final files to a backup directory to keep them and remove the rest before committing to Github.
 ```bash
+mkdir backup
+mv annotated.renamed.curated.gff *B_plicatilis.final.* backup/
+mv contigs_to_remove.txt backup/
+mv SUSPECT_PROTEIN_NAMES.correction.tsv backup/
+
 rm *.pass1.*
 rm *.pass2.*
+rm *.pass3.*
 rm map.txt shorts.list.txt
 rm fixed_shorts.gff
-rm annotated.gff
-rm data/maker2.nofasta.curated.gff
-rm data/maker2.nofasta.gff
-rm data/Brachionus_plicatilis_scaffold_min500_real.fasta
-
-mkdir backup
-mv annotated.renamed.gff *B_plicatilis.final.* backup/
+rm annotated.gff annotated.renamed.gff
+rm data/maker2.nofasta.curated.*
+rm SUSPECT_PROTEIN_NAMES.tsv
+gzip data/maker2.nofasta.gff
+gzip data/Brachionus_plicatilis_scaffold_min500_real.fasta
 
 cd backup
-gzip *.*
+#gzip everything except README.md file
+for f in $(ls -1 | grep -v "README.md"); do gzip $f; done
+
 #split up any file that is larger than 5 MB into chunks so that each is ~1MB in size
 for file in $(ls -l --block-size=MB | perl -ne 'chomp; @a=split(" "); $a[4] =~ s/MB//; if ($a[4] >= 5){print "$a[-1],$a[4]\n"}')
 do

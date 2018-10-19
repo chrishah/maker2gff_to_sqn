@@ -1,0 +1,5 @@
+#regarding the issue 'CDS_WITHOUT_MRNA' in the Discrepancy report
+#find gene ids with ',' in prodcut
+cat annotated.renamed.curated.gff | perl -ne 'chomp; if ($_ =~ /\tgene\t/){@a=split("\t"); @b=split(";",$a[8]); for (@b){if (($_ =~ /description=/) and ($_ =~ /,/)){print "$a[8]\n"}}}'
+
+add those to the curation file, don't forget to not overwrite the latest curated file
